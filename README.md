@@ -26,7 +26,11 @@ The full model includes logistic tumor growth, immune-related tumor cell loss, a
 
 The dataset includes 13 tumor volume measurements at consecutive days and is loaded by `load_pei_data()` in `scr/data.py`.
 
-The values were extracted numerically from the published figure in Pei et al.: Y. Pei, S. Han, C. Li, J. Lei, F. Wen, "Data-based modeling of breast cancer and optimal therapy," Journal of Theoretical Biology 573 (2023) 111593. doi:10.1016/j.jtbi.2023.111593.
+The values were extracted numerically from the published figure in Pei et al.:
+
+Y. Pei, S. Han, C. Li, J. Lei, F. Wen, "Data-based modeling of breast cancer and optimal therapy," Journal of Theoretical Biology 573 (2023) 111593. [doi:10.1016/j.jtbi.2023.111593](https://doi.org/10.1016/j.jtbi.2023.111593).
+
+URL: https://www.sciencedirect.com/science/article/pii/S002251932300190X
 
 ## Usage
 
@@ -45,6 +49,39 @@ The values were extracted numerically from the published figure in Pei et al.: Y
 from scr.methods import plot_model, plot_models, OF, OF2
 from scr.data import p0, intervals
 ```
+
+## Code, data, and materials availability
+
+The code, data, and supporting materials used in this study are publicly available on GitHub at https://github.com/davidalejandromiranda/field_cancerization_effect_modelling and on Zenodo as:
+
+*davidalejandromiranda/field_cancerization_effect_modelling: Supporting Information for the modeling of field cancerization of tumor volume dynamics.*
+
+Zenodo DOI: https://doi.org/10.5281/zenodo.19544133 (v1.0.1)
+
+## How to cite this repository
+
+Jainer A. Gómez, Leidy J. Rojas, David A. Miranda (2026). davidalejandromiranda/field_cancerization_effect_modelling: Supporting Information for the modeling of field cancerization of tumor volume dynamics (v1.0.1). Zenodo. https://doi.org/10.5281/zenodo.19544133
+
+DOI: 10.5281/zenodo.19544133
+
+BibTeX
+
+```bibtex
+@software{Gomez2026,
+  author       = {Jainer A. Gómez and Leidy J. Rojas and David A. Miranda},
+  title        = {davidalejandromiranda/field_cancerization_effect_modelling: Supporting Information for the modeling of field cancerization of tumor volume dynamics},
+  month        = apr,
+  year         = {2026},
+  publisher    = {Zenodo},
+  version      = {v1.0.1},
+  doi          = {10.5281/zenodo.19544133},
+  url          = {https://doi.org/10.5281/zenodo.19544133}
+}
+```
+
+License
+
+This work is under the MIT license.
 
 ## Notes
 
