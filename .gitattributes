@@ -1,0 +1,9 @@
+# Keep text files consistent across operating systems.
+* text=auto eol=lf
+
+# These formats are binary and must not be line-ending normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
