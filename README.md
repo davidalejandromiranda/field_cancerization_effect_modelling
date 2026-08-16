@@ -168,9 +168,9 @@ DOI: 10.5281/zenodo.21967874
 BibTeX
 
 ```bibtex
-@software{Gomez2026,
+@misc{Gomez2026,
   author       = {Jainer A. Gómez and Leidy J. Rojas and David A. Miranda},
-  title        = {davidalejandromiranda/field_cancerization_effect_modelling: v2.0.0 --- Supporting Information for the modeling of field cancerization of tumor volume dynamics},
+  title        = {davidalejandromiranda/field\_cancerization\_effect\_modelling: v2.0.0 --- Supporting Information for the modeling of field cancerization of tumor volume dynamics},
   month        = aug,
   year         = {2026},
   publisher    = {Zenodo},
@@ -178,6 +178,7 @@ BibTeX
   doi          = {10.5281/zenodo.21967874},
   url          = {https://doi.org/10.5281/zenodo.21967874}
 }
+
 ```
 
 ## License
