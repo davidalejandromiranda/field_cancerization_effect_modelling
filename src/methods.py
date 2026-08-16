@@ -10,7 +10,7 @@ import pandas as pd
 from scipy.integrate import solve_ivp
 from scipy.optimize import basinhopping
 
-from scr import data
+from src import data
 
 RNG_SEED = 20260814
 
@@ -45,6 +45,24 @@ def extended_reparam_rhs(t, y, m1, m2, lambda_n, gamma, gamma_prime):
     return [m1 * c - m2 * c**2 + lambda_n * n, gamma_prime * c - gamma * n]
 
 
+def original_to_reparam_extended(params):
+    """Return (m1, m2, lambda_N, gamma, gamma_prime) from the original form."""
+    r, inv_k, a_k_t, lambda_st, lambda_n, gamma, gamma_prime = np.asarray(params, dtype=float)
+    return np.array([
+        r - a_k_t + lambda_st / 2.0,
+        r * inv_k,
+        lambda_n,
+        gamma,
+        gamma_prime,
+    ])
+
+
+def rescale_reparam_extended(params, state_scale):
+    """Apply C_V=C/s, N_V=N/s to the reparameterized extended system."""
+    m1, m2, lambda_n, gamma, gamma_prime = np.asarray(params, dtype=float)
+    return np.array([m1, m2 * float(state_scale), lambda_n, gamma, gamma_prime])
+
+
 # Compatibility aliases used by the public v1 repository.
 cancer_model = extended_original_rhs
 cancer_model2 = baseline_original_rhs
@@ -77,6 +95,15 @@ def predict_breast(rhs, params, initial=None, times=None):
     return _solve(rhs, params, initial, times).y[0] / data.CELL_DENSITY
 
 
+def predict_breast_from_initial_time(rhs, params, initial, initial_time, observation_times):
+    """Predict breast tumor volume when the initial state is set before observations."""
+    evaluation_times = np.concatenate((
+        [float(initial_time)], np.asarray(observation_times, dtype=float)
+    ))
+    prediction = _solve(rhs, params, initial, evaluation_times).y[0] / data.CELL_DENSITY
+    return prediction[1:]
+
+
 def mse(observed, predicted):
     return float(np.mean((np.asarray(observed) - np.asarray(predicted)) ** 2))
 
@@ -103,6 +130,12 @@ MODEL_SPECIFICATIONS = (
     ("Extended FCE (initial)", extended_original_rhs, data.EXTENDED_INITIAL_PARAMS, 7),
     ("Extended FCE (reparameterized)", extended_reparam_rhs, data.EXTENDED_REPARAM_PARAMS, 5),
 )
+
+FIT_PARAMETER_NAMES = {
+    2: ("m1", "m2"),
+    5: ("m1", "m2", "lambda_N", "gamma", "gamma_prime"),
+    7: ("r", "1/K", "aK_T", "lambda_ST", "lambda_N", "gamma", "gamma_prime"),
+}
 
 
 def model_comparison_table():
@@ -142,26 +175,115 @@ def fit_model(rhs, initial_guess, bounds, initial, times=None,
     )
 
 
-def sample_admissible_predictions(sample_count=500, seed=RNG_SEED, times=None):
-    """Sample the reported intervals and return predicted breast volumes."""
-    if times is None:
-        times = np.linspace(data.BREAST_TIME[0], data.BREAST_TIME[-1], 500)
+def fit_result_table(result, parameter_names=None):
+    """Return a DataFrame of fitted estimates using manuscript notation."""
+    estimates = np.asarray(result.x, dtype=float)
+    if parameter_names is None:
+        parameter_names = FIT_PARAMETER_NAMES.get(estimates.size)
+    if parameter_names is None or len(parameter_names) != estimates.size:
+        raise ValueError(
+            "parameter_names must match the number of fitted parameters."
+        )
+    return pd.DataFrame({
+        "parameter": tuple(parameter_names),
+        "estimate": estimates,
+    })
+
+
+def format_fit_result(result, model_name="Model fit", parameter_names=None):
+    """Format a scipy basinhopping result using readable manuscript notation."""
+    table = fit_result_table(result, parameter_names)
+    lines = [
+        model_name,
+        f"MSE = {float(result.fun):.12g}",
+        "Parameter estimates:",
+    ]
+    for row in table.itertuples(index=False):
+        lines.append(f"  {row.parameter} = {row.estimate:.12g}")
+    return "\n".join(lines)
+
+
+def print_fit_result(result, model_name="Model fit", parameter_names=None):
+    """Print and return the human-readable fitted-parameter summary."""
+    text = format_fit_result(result, model_name, parameter_names)
+    print(text)
+    return text
+
+
+def fitting_smoke_test():
+    """Run a small deterministic optimization to verify the fitting API."""
+    initial_guess = data.BASELINE_REPARAM_PARAMS * np.array([1.05, 0.95])
+    bounds = [(-2.0, 2.0), (0.0, 1e-7)]
+    initial = data.BREAST_INITIAL_CONDITIONS[:1]
+    start_mse = objective(
+        initial_guess, baseline_reparam_rhs, initial, data.BREAST_TIME, data.BREAST_VOLUME
+    )
+    result = fit_model(
+        baseline_reparam_rhs,
+        initial_guess=initial_guess,
+        bounds=bounds,
+        initial=initial,
+        niter=1,
+    )
+    stored_mse = objective(
+        data.BASELINE_REPARAM_PARAMS,
+        baseline_reparam_rhs,
+        initial,
+        data.BREAST_TIME,
+        data.BREAST_VOLUME,
+    )
+    return {
+        "start_MSE": float(start_mse),
+        "smoke_test_MSE": float(result.fun),
+        "stored_baseline_reparam_MSE": float(stored_mse),
+        "improved_from_start": bool(np.isfinite(result.fun) and result.fun < start_mse),
+        "parameters": np.asarray(result.x, dtype=float).tolist(),
+    }
+
+
+def admissible_parameter_sample(candidate_count=None, seed=RNG_SEED):
+    """Sample candidates and retain only those satisfying MSE <= epsilon."""
+    if candidate_count is None:
+        candidate_count = data.ADMISSIBLE_CANDIDATE_COUNT
     rng = np.random.default_rng(seed)
     low, high = data.EXTENDED_INITIAL_INTERVALS.T
-    samples = rng.uniform(low, high, size=(sample_count, len(low)))
+    candidates = rng.uniform(low, high, size=(candidate_count, len(low)))
+    retained = []
+    retained_mse = []
+    for params in candidates:
+        prediction = predict_breast(extended_original_rhs, params, times=data.BREAST_TIME)
+        candidate_mse = mse(data.BREAST_VOLUME, prediction)
+        if candidate_mse <= data.ADMISSIBLE_MSE_EPSILON:
+            retained.append(params)
+            retained_mse.append(candidate_mse)
+    if not retained:
+        raise RuntimeError(
+            "No admissible parameter vectors retained; increase candidate_count "
+            "or verify ADMISSIBLE_MSE_EPSILON."
+        )
+    return candidates, np.asarray(retained), np.asarray(retained_mse)
+
+
+def sample_admissible_predictions(candidate_count=None, seed=RNG_SEED, times=None):
+    """Return predictions from vectors satisfying MSE <= ADMISSIBLE_MSE_EPSILON."""
+    if times is None:
+        times = np.linspace(data.BREAST_TIME[0], data.BREAST_TIME[-1], 500)
+    _, samples, retained_mse = admissible_parameter_sample(candidate_count, seed)
     predictions = np.vstack([
         predict_breast(extended_original_rhs, params, times=times)
         for params in samples
     ])
-    return np.asarray(times), samples, predictions
+    return np.asarray(times), samples, predictions, retained_mse
 
 
-def plot_breast_comparison(sample_count=300, seed=RNG_SEED):
+def plot_breast_comparison(candidate_count=None, seed=RNG_SEED):
     """Create the four numerical panels requested for manuscript Figure 3."""
     dense_time = np.linspace(1.0, 13.0, 500)
     baseline = predict_breast(baseline_original_rhs, data.BASELINE_ORIGINAL_PARAMS, times=dense_time)
     extended = predict_breast(extended_original_rhs, data.EXTENDED_INITIAL_PARAMS, times=dense_time)
-    sample_time, _, sampled = sample_admissible_predictions(sample_count, seed, dense_time)
+    sample_time, retained_params, sampled, _ = sample_admissible_predictions(
+        candidate_count, seed, dense_time
+    )
     fig, axes = plt.subplots(2, 2, figsize=(9.2, 6.5), dpi=150)
 
     axes[0, 0].plot(dense_time, baseline, color="black", label="Baseline")
@@ -169,7 +291,7 @@ def plot_breast_comparison(sample_count=300, seed=RNG_SEED):
     axes[0, 0].set_title("Baseline model")
 
     axes[0, 1].fill_between(sample_time, sampled.min(axis=0), sampled.max(axis=0),
-                            color="green", alpha=0.2, label="Sampled projections")
+                            color="green", alpha=0.2, label="Admissible region")
     axes[0, 1].plot(dense_time, extended, color="black", label="Extended FCE")
     axes[0, 1].scatter(data.BREAST_TIME, data.BREAST_VOLUME,
                        color="red", s=25, label="Data")
@@ -186,7 +308,7 @@ def plot_breast_comparison(sample_count=300, seed=RNG_SEED):
 
     observed_samples = np.vstack([
         predict_breast(extended_original_rhs, params)
-        for params in sample_admissible_predictions(sample_count, seed, data.BREAST_TIME)[1]
+        for params in retained_params
     ])
     axes[1, 1].axhline(0.0, color="black", linestyle="--", linewidth=1)
     for residual in (
@@ -216,9 +338,9 @@ def plot_breast_comparison(sample_count=300, seed=RNG_SEED):
 
 
 def load_tumor_case(case):
-    frame = pd.read_excel(Path(case["file"]), usecols=["tiempo", "valores"]).dropna()
-    return (frame["tiempo"].to_numpy(dtype=float),
-            frame["valores"].to_numpy(dtype=float))
+    frame = pd.read_excel(Path(case["file"]), usecols=["time", "volume"]).dropna()
+    return (frame["time"].to_numpy(dtype=float),
+            frame["volume"].to_numpy(dtype=float))
 
 
 def _volume_scale_case_rhs(t, y, r, carrying_capacity, a_k_t,
@@ -232,7 +354,83 @@ def predict_tumor_case(case, points=500):
     times = np.linspace(0.0, float(case["t_max"]), points)
     prediction = _solve(_volume_scale_case_rhs, case["params"],
                         case["initial"], times).y[0]
-    return times, prediction * case["model_to_mm3"]
+    return times, prediction * case["model_to_plot_scale"]
+
+
+def _axis_volume_label(unit):
+    if unit == "mm^3":
+        return r"Volume (mm$^3$)"
+    if unit == "cm^3":
+        return r"Volume (cm$^3$)"
+    return f"Volume ({unit})"
+
+
+def _format_cell_count(value):
+    value = float(value)
+    if value == 0.0:
+        return "0"
+    exponent = int(np.floor(np.log10(abs(value))))
+    coefficient = value / 10.0**exponent
+    return rf"{coefficient:g}\times10^{exponent}"
+
+
+def initial_condition_label(scenario):
+    c0, n0 = scenario["initial"]
+    return rf"$C_0={_format_cell_count(c0)},\ N_0={_format_cell_count(n0)}$"
+
+
+def _scenario_row(scenario, temporal_initialization, params, t0):
+    params = np.asarray(params, dtype=float)
+    if np.isnan(t0):
+        prediction = predict_breast(
+            extended_original_rhs, params, initial=scenario["initial"], times=data.BREAST_TIME
+        )
+    else:
+        prediction = predict_breast_from_initial_time(
+            extended_original_rhs, params, scenario["initial"], t0, data.BREAST_TIME
+        )
+    reparam = original_to_reparam_extended(params)
+    return {
+        "scenario_description": scenario["description"],
+        "temporal_initialization": temporal_initialization,
+        "C0": scenario["initial"][0],
+        "N0": scenario["initial"][1],
+        "r": params[0],
+        "inv_K": params[1],
+        "aK_T": params[2],
+        "lambda_ST": params[3],
+        "lambda_N": params[4],
+        "gamma": params[5],
+        "gamma_prime": params[6],
+        "m1": reparam[0],
+        "m2": reparam[1],
+        "t0": t0,
+        "MSE": mse(data.BREAST_VOLUME, prediction),
+        "parameter_source": "optimization-derived stored value",
+    }
+
+
+def initial_condition_parameter_table():
+    """Return stored optimization-derived parameters for Figure 5 scenarios."""
+    rows = []
+    for scenario in data.INITIAL_CONDITION_SCENARIOS:
+        rows.append(_scenario_row(
+            scenario, "fixed initial time", scenario["fixed_params"], np.nan
+        ))
+        row = _scenario_row(
+            scenario, "optimized effective temporal offset",
+            data.SHIFTED_SCENARIO_PARAMS, data.SHIFTED_INITIAL_TIME
+        )
+        row["parameter_source"] = "stored shared shifted-time value"
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def export_initial_condition_parameters(path="initial_condition_parameter_export.csv"):
+    """Write the Figure-5 stored parameter table to CSV and return it."""
+    table = initial_condition_parameter_table()
+    table.to_csv(path, index=False)
+    return table
 
 
 def plot_cross_cancer(cases=data.TUMOR_CASES):
@@ -244,7 +442,7 @@ def plot_cross_cancer(cases=data.TUMOR_CASES):
     for ax, case, color, marker in zip(axes.flat, cases, colors, markers):
         obs_time, observed = load_tumor_case(case)
         model_time, predicted = predict_tumor_case(case)
-        observed = observed * case["observed_to_mm3"]
+        observed = observed * case["observed_to_plot_scale"]
         ax.plot(model_time, predicted, color=color, linewidth=2.2)
         ax.scatter(
             obs_time, observed, s=34, marker=marker, color=color,
@@ -252,7 +450,7 @@ def plot_cross_cancer(cases=data.TUMOR_CASES):
         )
         ax.set_title(case["name"], fontsize=12, fontweight="bold")
         ax.set_xlabel("Time (day)", fontsize=11, fontweight="bold")
-        ax.set_ylabel(r"Volume (mm$^3$)", fontsize=11, fontweight="bold")
+        ax.set_ylabel(_axis_volume_label(case["plot_unit"]), fontsize=11, fontweight="bold")
         ax.set_xlim(0, case["t_max"])
         ax.spines[["top", "right"]].set_visible(False)
         ax.spines[["left", "bottom"]].set_linewidth(1.4)
@@ -275,7 +473,8 @@ def plot_initial_condition_scenarios():
             initial=scenario["initial"], times=fixed_time,
         )
         axes[0].plot(fixed_time, fixed_prediction, color=color,
-                     linestyle=style, linewidth=2, label=scenario["label"])
+                     linestyle=style, linewidth=2,
+                     label=initial_condition_label(scenario))
 
         shifted_time = np.linspace(data.SHIFTED_INITIAL_TIME, 13.0, 500)
         shifted_prediction = predict_breast(
@@ -283,7 +482,8 @@ def plot_initial_condition_scenarios():
             initial=scenario["initial"], times=shifted_time,
         )
         axes[1].plot(shifted_time, shifted_prediction, color=color,
-                     linestyle=style, linewidth=2, label=scenario["label"])
+                     linestyle=style, linewidth=2,
+                     label=initial_condition_label(scenario))
 
     for label, ax in zip(("a)", "b)"), axes):
         ax.scatter(data.BREAST_TIME, data.BREAST_VOLUME,
@@ -331,7 +531,7 @@ def plot_pei_model(params):
 
 def plot_models(params, intervals, num_random=5):
     del params, intervals
-    return plot_breast_comparison(sample_count=max(num_random, 1))
+    return plot_breast_comparison(candidate_count=max(num_random, data.ADMISSIBLE_CANDIDATE_COUNT))
 
 
 def compute_residuals_with_field(params):
