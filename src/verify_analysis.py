@@ -53,6 +53,22 @@ expected_initial_plot_volume = {
     "Esophageal cancer": 91.0,
     "Skin cancer": 31.3,
 }
+expected_first_observation_time = {
+    "Gastric cancer": 0.0,
+    "Pancreatic cancer": 0.0,
+    "Breast cancer": 1.0,
+    "Colon cancer": 10.0,
+    "Esophageal cancer": 0.0,
+    "Skin cancer": 0.25,
+}
+expected_first_observation_volume = {
+    "Gastric cancer": 120.0,
+    "Pancreatic cancer": 96.0,
+    "Breast cancer": 400.0,
+    "Colon cancer": 90.0,
+    "Esophageal cancer": 91.0,
+    "Skin cancer": 31.3,
+}
 for case in data.TUMOR_CASES:
     observed_time, observed = methods.load_tumor_case(case)
     model_time, predicted = methods.predict_tumor_case(case)
@@ -63,21 +79,48 @@ for case in data.TUMOR_CASES:
         "observed_unit", "model_state_unit", "initial_unit", "plot_unit",
         "observed_to_plot_scale", "model_to_plot_scale", "source_publication",
         "figure_panel", "experimental_group", "raw_response", "raw_unit",
-        "transformation", "initial_experimental_volume_mm3",
+        "transformation", "initial_experimental_volume_mm3", "doi",
+        "experimental_time_unit", "model_initial_time", "first_observation_time",
+        "first_observation_volume_mm3",
     ):
         assert key in case, f"{case['name']} lacks dataset metadata: {key}"
+    for value in case.values():
+        if isinstance(value, str):
+            assert "AUTHOR CONFIRMATION REQUIRED" not in value
     assert case["plot_unit"] == "mm^3"
+    assert case["experimental_time_unit"] == "day"
     assert case["observed_to_plot_scale"] > 0.0
     assert case["model_to_plot_scale"] > 0.0
     assert not np.isclose(observed.max() * case["observed_to_plot_scale"], 1.0)
     np.testing.assert_allclose(
-        observed[0] * case["observed_to_plot_scale"],
-        expected_initial_plot_volume[case["name"]],
-    )
-    np.testing.assert_allclose(
         case["initial_experimental_volume_mm3"],
         expected_initial_plot_volume[case["name"]],
     )
+    np.testing.assert_allclose(
+        observed_time[0],
+        expected_first_observation_time[case["name"]],
+    )
+    np.testing.assert_allclose(
+        case["first_observation_time"],
+        expected_first_observation_time[case["name"]],
+    )
+    np.testing.assert_allclose(
+        observed[0] * case["observed_to_plot_scale"],
+        expected_first_observation_volume[case["name"]],
+    )
+    np.testing.assert_allclose(
+        case["first_observation_volume_mm3"],
+        expected_first_observation_volume[case["name"]],
+    )
+
+colon_case = next(case for case in data.TUMOR_CASES
+                  if case["name"] == "Colon cancer")
+assert colon_case["model_initial_time"] == 0.0
+np.testing.assert_allclose(colon_case["model_initial_volume_mm3"], 7.67567060905876)
+np.testing.assert_allclose(colon_case["initial"], (7.67567060905876, 7.67567060905876))
+assert colon_case["initial_experimental_volume_mm3"] == 90.0
+assert colon_case["first_observation_time"] == 10.0
+assert colon_case["first_observation_volume_mm3"] == 90.0
 
 # Current cross-cancer plotting labels use mm^3. Breast is the only dataset
 # requiring a non-1.0 display conversion in the current repository workflow.
@@ -88,6 +131,9 @@ assert breast_case["observed_unit"] == "cm^3"
 assert breast_case["model_state_unit"] == "cells"
 assert breast_observed_cm3[0] * breast_case["observed_to_plot_scale"] == 400.0
 assert breast_case["model_to_plot_scale"] == 1000.0 / data.CELL_DENSITY
+assert breast_case["transformation"] == (
+    "volume_mm3 = (cell_count / rho) * 1000, rho = 1e7 cells/cm^3"
+)
 assert all(case["observed_to_plot_scale"] == 1.0
            for case in data.TUMOR_CASES if case is not breast_case)
 assert all(case["model_to_plot_scale"] == 1.0
@@ -103,6 +149,8 @@ np.testing.assert_allclose(
     gastric_raw["relative_volume"] * gastric_raw["V0_mm3"],
     gastric_observed,
 )
+assert gastric_case["transformation"] == "absolute_volume_mm3 = relative_volume * 100"
+assert set(gastric_raw["V0_mm3"]) == {100.0}
 
 # The reported model ranking must remain stable under the current data choice.
 comparison = methods.model_comparison_table()
@@ -140,8 +188,11 @@ assert actual_labels == expected_labels
 # visual axis limit of -1 day.
 assert data.SHIFTED_INITIAL_TIME == -0.2162
 figure = methods.plot_initial_condition_scenarios()
-right_panel_x0 = figure.axes[1].lines[0].get_xdata()[0]
-assert right_panel_x0 == data.SHIFTED_INITIAL_TIME
+assert len([line for line in figure.axes[0].lines if len(line.get_xdata()) == 500]) == 4
+right_panel_lines = [line for line in figure.axes[1].lines if len(line.get_xdata()) == 500]
+assert len(right_panel_lines) == 4
+assert all(line.get_xdata()[0] == data.SHIFTED_INITIAL_TIME
+           for line in right_panel_lines)
 
 parameter_export = methods.export_initial_condition_parameters()
 assert len(parameter_export) == 8
@@ -149,7 +200,20 @@ assert set(parameter_export["temporal_initialization"]) == {
     "fixed initial time",
     "optimized effective temporal offset",
 }
-assert parameter_export[["C0", "N0", "MSE"]].notna().all().all()
+assert parameter_export[["C0", "N0"]].notna().all().all()
+fixed_rows = parameter_export[
+    parameter_export["temporal_initialization"] == "fixed initial time"
+]
+optimized_rows = parameter_export[
+    parameter_export["temporal_initialization"] == "optimized effective temporal offset"
+]
+assert fixed_rows[["r", "inv_K", "aK_T", "lambda_ST",
+                   "lambda_N", "gamma", "gamma_prime", "MSE"]].notna().all().all()
+assert optimized_rows[["r", "inv_K", "aK_T", "lambda_ST",
+                       "lambda_N", "gamma", "gamma_prime", "t0", "MSE"]].notna().all().all()
+np.testing.assert_allclose(optimized_rows["t0"], data.SHIFTED_INITIAL_TIME)
+assert all("stored optimization-derived value" in value
+           for value in optimized_rows["parameter_source"])
 
 fitting_smoke_test = methods.fitting_smoke_test()
 assert fitting_smoke_test["improved_from_start"]

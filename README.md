@@ -24,7 +24,7 @@ This repository contains the code and data used to support the manuscript on fie
 The model describes tumor volume evolution with an additional field effect state variable. The main variables are:
 
 - `C`: tumor cells.
-- `N`: preconditioning normal cells.
+- `N`: normal preconditioned cells.
 
 The full model includes logistic tumor growth, immune-related tumor cell loss, a β-catenin activation term, and a field effect contribution. A baseline model without the field effect is also provided for comparison.
 
@@ -38,15 +38,20 @@ Five additional longitudinal datasets from published experimental studies are in
 
 The breast-cancer case study is stored as tumor volume in cm^3, converted to tumor-cell counts for model integration using `CELL_DENSITY = 1.0e7` cells/cm^3, and converted back to volume for residuals, information criteria, and plotting. The fitting objective used by the API is the manuscript MSE definition, `mean((observed - predicted)^2)`, on the same response scale used for the reported comparison.
 
-The five non-breast exploratory datasets remain on absolute tumor-volume scales in mm^3 during model integration and plotting. They are not converted to estimated cell counts, normalized by their maxima, rescaled to `[0, 1]`, or fit with a common parameter set. Their Figure-4-style plots are displayed with explicit per-case metadata in `src/data.py`:
+The five non-breast exploratory datasets remain on absolute tumor-volume scales in mm^3 during model integration and plotting. They are not converted to estimated cell counts, normalized by their maxima, rescaled to `[0, 1]`, or fit with a common parameter set. The breast-cancer panel uses the principal breast-cancer case-study initialization and the explicit conversion `V = C / rho`, with `rho = 1.0e7` cells/cm^3. The Figure-4-style plots are displayed with explicit per-case metadata in `src/data.py`:
 
 - `source_publication`
+- `doi`
 - `figure_panel`
 - `experimental_group`
 - `raw_response`
 - `raw_unit`
 - `transformation`
 - `initial_experimental_volume_mm3`
+- `model_initial_time`
+- `first_observation_time`
+- `first_observation_volume_mm3`
+- `experimental_time_unit`
 - `observed_unit`
 - `model_state_unit`
 - `initial_unit`
@@ -54,7 +59,7 @@ The five non-breast exploratory datasets remain on absolute tumor-volume scales 
 - `observed_to_plot_scale`
 - `model_to_plot_scale`
 
-These metadata document the calculations as implemented. They should not be read as a biological assertion that the non-breast exploratory fits estimate a common biological parameter set or validate a universal FCE mechanism.
+These metadata document the calculations as implemented. They also distinguish the model initial condition, the first experimental tumor-volume observation, and the corresponding experimental measurement time. The code does not reset each experimental time axis so that the first stored observation becomes `t = 0`. In the colon-cancer case, the implemented fit uses a model initial condition of approximately `7.68 mm^3` at model time `t = 0`, while the first available experimental Ctrl observation is approximately `90 mm^3` at day 10. The `7.68 mm^3` value is not an experimental measurement. These metadata should not be read as a biological assertion that the non-breast exploratory fits estimate a common biological parameter set or validate a universal FCE mechanism.
 
 The gastric-cancer observations were digitized from relative tumor volume, `V/V0`, and are stored as absolute volume after multiplying by `V0 = 100 mm^3`. The raw relative values are preserved in `src/cancer_types/gastric_cancer/raw_relative_observations.csv`.
 
@@ -88,8 +93,12 @@ python -m pip install -r requirements.txt
 3. Use the Python modules directly if needed:
 
 ```python
-from src.methods import plot_model, plot_models, OF, OF2
-from src.data import p0, intervals
+from src import methods
+
+figure_3 = methods.plot_breast_comparison(candidate_count=1000)
+figure_4 = methods.plot_cross_cancer()
+figure_5 = methods.plot_initial_condition_scenarios()
+comparison = methods.model_comparison_table()
 ```
 
 4. Run the numerical verification checks:
@@ -114,12 +123,18 @@ The repository is designed to reproduce the numerical outputs reported in the ma
 - integrate the baseline and extended model formulations;
 - reproduce the main simulation figures;
 - recompute residuals and the model-comparison metrics (RSS, MSE, AIC, and BIC);
-- reproduce the Figure-3 admissible-region sampling with `ADMISSIBLE_MSE_EPSILON = 0.004`;
+- reproduce the Figure-3 Monte Carlo/admissible-region sampling with `ADMISSIBLE_MSE_EPSILON = 0.004`;
 - reproduce the exploratory cross-cancer trajectories and the initial-condition scenario analysis;
 - export the stored Figure-5 optimization-derived parameter values; and
 - inspect the original and reparameterized model formulations.
 
-The repository also includes a parameter-fitting API based on `scipy.optimize.basinhopping`, with a documented fixed random seed and bounded local minimization. The notebook executes a lightweight deterministic fitting smoke test so that this path is tested, and `methods.print_fit_result()` formats any `fit_model` result using the manuscript parameter notation. However, it does **not** automatically rerun every original parameter-estimation procedure used during manuscript development. Several manuscript tables and figures are reproduced from the reported fitted parameter sets stored in `src/data.py`.
+The repository supports three distinct workflows:
+
+- Reproduction using stored final parameter sets: the manuscript-facing figures, comparisons, and Figure-5 parameter export are generated from values stored in `src/data.py`.
+- New basin-hopping optimization: `methods.fit_model()` wraps `scipy.optimize.basinhopping` with a documented fixed random seed and bounded local minimization for users who intentionally run a new fit.
+- Monte Carlo/admissible-region sampling: Figure 3 samples candidate vectors and retains only those satisfying the empirical criterion `MSE(theta) <= 0.004`.
+
+The notebook executes a lightweight deterministic fitting smoke test so that the basin-hopping path is tested, and `methods.print_fit_result()` formats any `fit_model` result using the manuscript parameter notation. However, it does **not** automatically rerun every original parameter-estimation procedure used during manuscript development. Several manuscript tables and figures are reproduced from the reported fitted parameter sets stored in `src/data.py`.
 
 Accordingly, the repository should be interpreted as supporting reproducibility of the reported numerical results and model calculations, rather than as an archival record of every historical optimization run. Users who perform new parameter-estimation runs should record the model formulation, parameter bounds, initial guesses, initial conditions, number of basin-hopping iterations, random seed, and resulting objective-function value. The function `fit_model` in `src/methods.py` provides the fitting framework used for such analyses.
 
@@ -127,8 +142,8 @@ Accordingly, the repository should be interpreted as supporting reproducibility 
 
 - The breast model-comparison table is recomputed from the declared 13-point dataset and stored parameter values using RSS, MSE, AIC, and BIC on the tumor-volume scale. If manuscript table values differ from these recomputed values, the repository reports the discrepancy rather than changing stored data or parameters to force agreement.
 - The Figure-3 green band is built only from sampled parameter vectors satisfying `MSE(theta) <= 0.004`. This empirical tolerance is not a confidence interval, posterior criterion, MCMC threshold, or probability statement.
-- Initial-condition scenarios for Figure 5 are generated from the numerical values in `INITIAL_CONDITION_SCENARIOS`, ordered to match manuscript Table 2.
-- The optimized initial time used in the Figure-5 shifted-time panel is `SHIFTED_INITIAL_TIME = -0.2162` day. It is an effective optimization-derived temporal offset. The plot axis may extend to -1 day for visualization, but -1 day is not the fitted value and the offset is not interpreted as a biological pre-inoculation interval.
+- Initial-condition scenarios for Figure 5 are generated from the numerical values in `INITIAL_CONDITION_SCENARIOS`, ordered to match the manuscript.
+- The optimized initial time used in the Figure-5 shifted-time panel is `SHIFTED_INITIAL_TIME = -0.2162` day. It is an effective optimization-derived temporal offset. The plot axis may extend to -1 day for visualization, but -1 day is not the fitted value and the offset is not interpreted as a biological pre-inoculation interval, tumor-growth onset time, or field-cancerization onset time.
 - The current local repository has changes beyond the Zenodo v1.0.1 archive. The existing DOI should be updated with a final release after author approval; this repository does not create a new DOI by itself.
 
 ## Code, data, and materials availability

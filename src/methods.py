@@ -351,7 +351,8 @@ def _volume_scale_case_rhs(t, y, r, carrying_capacity, a_k_t,
 
 
 def predict_tumor_case(case, points=500):
-    times = np.linspace(0.0, float(case["t_max"]), points)
+    initial_time = float(case.get("model_initial_time", 0.0))
+    times = np.linspace(initial_time, float(case["t_max"]), points)
     prediction = _solve(_volume_scale_case_rhs, case["params"],
                         case["initial"], times).y[0]
     return times, prediction * case["model_to_plot_scale"]
@@ -406,7 +407,7 @@ def _scenario_row(scenario, temporal_initialization, params, t0):
         "m2": reparam[1],
         "t0": t0,
         "MSE": mse(data.BREAST_VOLUME, prediction),
-        "parameter_source": "optimization-derived stored value",
+        "parameter_source": "stored optimization-derived value used to reproduce the manuscript analysis",
     }
 
 
@@ -421,7 +422,9 @@ def initial_condition_parameter_table():
             scenario, "optimized effective temporal offset",
             data.SHIFTED_SCENARIO_PARAMS, data.SHIFTED_INITIAL_TIME
         )
-        row["parameter_source"] = "stored shared shifted-time value"
+        row["parameter_source"] = (
+            "stored optimization-derived value used to reproduce the manuscript analysis"
+        )
         rows.append(row)
     return pd.DataFrame(rows)
 
