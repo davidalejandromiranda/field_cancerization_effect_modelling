@@ -140,34 +140,47 @@ Accordingly, the repository should be interpreted as supporting reproducibility 
 
 ## Code, data, and materials availability
 
-The code, data, and supporting materials used in this study are publicly available on GitHub at https://github.com/davidalejandromiranda/field_cancerization_effect_modelling and on Zenodo as:
+The code, data, and supporting materials used in this study are publicly available on GitHub at https://github.com/davidalejandromiranda/field_cancerization_effect_modelling and on Zenodo.
 
-*davidalejandromiranda/field_cancerization_effect_modelling: Supporting Information for the modeling of field cancerization of tumor volume dynamics.*
+### Current release
 
-Zenodo DOI: https://doi.org/10.5281/zenodo.19544133 (v1.0.1)
+*davidalejandromiranda/field_cancerization_effect_modelling: v2.0.0 — Supporting Information for the modeling of field cancerization of tumor volume dynamics.*
+
+Version: v2.0.0  
+Release date: August 16, 2026  
+Zenodo DOI: https://doi.org/10.5281/zenodo.21967874
+
+### Previous archived release
+
+For traceability, the previous archived version remains available on Zenodo:
+
+Version: v1.0.1  
+Zenodo DOI: https://doi.org/10.5281/zenodo.19544133
 
 ## How to cite this repository
 
-Jainer A. Gómez, Leidy J. Rojas, David A. Miranda (2026). davidalejandromiranda/field_cancerization_effect_modelling: Supporting Information for the modeling of field cancerization of tumor volume dynamics (v1.0.1). Zenodo. https://doi.org/10.5281/zenodo.19544133
+Please cite the current release as:
 
-DOI: 10.5281/zenodo.19544133
+Jainer A. Gómez, Leidy J. Rojas, David A. Miranda (2026). *davidalejandromiranda/field_cancerization_effect_modelling: v2.0.0 — Supporting Information for the modeling of field cancerization of tumor volume dynamics*. Zenodo. https://doi.org/10.5281/zenodo.21967874
+
+DOI: 10.5281/zenodo.21967874
 
 BibTeX
 
 ```bibtex
 @software{Gomez2026,
   author       = {Jainer A. Gómez and Leidy J. Rojas and David A. Miranda},
-  title        = {davidalejandromiranda/field_cancerization_effect_modelling: Supporting Information for the modeling of field cancerization of tumor volume dynamics},
-  month        = apr,
+  title        = {davidalejandromiranda/field_cancerization_effect_modelling: v2.0.0 --- Supporting Information for the modeling of field cancerization of tumor volume dynamics},
+  month        = aug,
   year         = {2026},
   publisher    = {Zenodo},
-  version      = {v1.0.1},
-  doi          = {10.5281/zenodo.19544133},
-  url          = {https://doi.org/10.5281/zenodo.19544133}
+  version      = {v2.0.0},
+  doi          = {10.5281/zenodo.21967874},
+  url          = {https://doi.org/10.5281/zenodo.21967874}
 }
 ```
 
-License
+## License
 
 This work is under the MIT license.
 
