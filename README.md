@@ -138,14 +138,6 @@ The notebook executes a lightweight deterministic fitting smoke test so that the
 
 Accordingly, the repository should be interpreted as supporting reproducibility of the reported numerical results and model calculations, rather than as an archival record of every historical optimization run. Users who perform new parameter-estimation runs should record the model formulation, parameter bounds, initial guesses, initial conditions, number of basin-hopping iterations, random seed, and resulting objective-function value. The function `fit_model` in `src/methods.py` provides the fitting framework used for such analyses.
 
-## Audit notes
-
-- The breast model-comparison table is recomputed from the declared 13-point dataset and stored parameter values using RSS, MSE, AIC, and BIC on the tumor-volume scale. If manuscript table values differ from these recomputed values, the repository reports the discrepancy rather than changing stored data or parameters to force agreement.
-- The Figure-3 green band is built only from sampled parameter vectors satisfying `MSE(theta) <= 0.004`. This empirical tolerance is not a confidence interval, posterior criterion, MCMC threshold, or probability statement.
-- Initial-condition scenarios for Figure 5 are generated from the numerical values in `INITIAL_CONDITION_SCENARIOS`, ordered to match the manuscript.
-- The optimized initial time used in the Figure-5 shifted-time panel is `SHIFTED_INITIAL_TIME = -0.2162` day. It is an effective optimization-derived temporal offset. The plot axis may extend to -1 day for visualization, but -1 day is not the fitted value and the offset is not interpreted as a biological pre-inoculation interval, tumor-growth onset time, or field-cancerization onset time.
-- The current local repository has changes beyond the Zenodo v1.0.1 archive. The existing DOI should be updated with a final release after author approval; this repository does not create a new DOI by itself.
-
 ## Code, data, and materials availability
 
 The code, data, and supporting materials used in this study are publicly available on GitHub at https://github.com/davidalejandromiranda/field_cancerization_effect_modelling and on Zenodo as:
